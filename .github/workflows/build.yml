@@ -1,4 +1,4 @@
-name: OpenWrt Build (Stage 2)
+name: OpenWrt Build (Stage 3 - Complete)
 
 on:
   workflow_dispatch:
@@ -21,18 +21,75 @@ jobs:
         sudo apt-get install -y build-essential clang flex bison gawk \
         gcc-multilib git libncurses5-dev libssl-dev python3 unzip zlib1g-dev \
         file wget curl rsync time qemu-utils libelf-dev
+        sudo timedatectl set-timezone "Asia/Shanghai"
 
     - name: Clone OpenWrt
       run: |
         git clone $REPO_URL -b $REPO_BRANCH openwrt
 
-    - name: Update feeds
+    - name: Load feeds config
+      run: |
+        if [ -f "feeds.conf.default" ]; then
+          cp feeds.conf.default openwrt/feeds.conf.default
+        fi
+
+    - name: Update & install feeds
       run: |
         cd openwrt
         ./scripts/feeds update -a
         ./scripts/feeds install -a
 
-    - name: Prepare config
+    - name: Custom Configuration (IP & Space & Plugins)
       run: |
         cd openwrt
+        # 1. 适配你家 TP-Link 网段，旁路由管理 IP 设为 192.168.0.2
+        sed -i 's/192.168.1.1/192.168.0.2/g' package/base-files/files/bin/config_generate
+
+        # 2. 物理扩容你的 32G 硬盘空间
+        echo "CONFIG_TARGET_KERNEL_PARTSIZE=128" >> .config
+        echo "CONFIG_TARGET_ROOTFS_PARTSIZE=16384" >> .config
+
+        # 3. 指定编译 x86_64 架构固件
+        echo "CONFIG_TARGET_x86=y" >> .config
+        echo "CONFIG_TARGET_x86_64=y" >> .config
+        echo "CONFIG_PACKAGE_luci=y" >> .config
+        echo "CONFIG_PACKAGE_kmod-tun=y" >> .config
+
+        # 4. 独立引入：主力 Mihomo 及其完美的中文控制面板
+        echo "CONFIG_PACKAGE_mihomo=y" >> .config
+        echo "CONFIG_PACKAGE_luci-app-mihomo=y" >> .config
+        echo "CONFIG_PACKAGE_luci-i18n-mihomo-zh-cn=y" >> .config
+
+        # 5. 独立引入：sing-box 纯净内核
+        echo "CONFIG_PACKAGE_sing-box=y" >> .config
+
+        # 6. 独立引入：mosdns 核心及 LuCI 控制面板
+        echo "CONFIG_PACKAGE_mosdns=y" >> .config
+        echo "CONFIG_PACKAGE_luci-app-mosdns=y" >> .config
+        echo "CONFIG_PACKAGE_luci-i18n-mosdns-zh-cn=y" >> .config
+
+        # 7. 补齐现代化透明代理必带的 nftables 依赖包
+        echo "CONFIG_PACKAGE_kmod-nft-tproxy=y" >> .config
+        echo "CONFIG_PACKAGE_yq=y" >> .config
+
+        # 刷新并补全所有依赖关系
         make defconfig
+
+    - name: Download packages
+      run: |
+        cd openwrt
+        make download -j8
+
+    - name: Compile firmware
+      run: |
+        cd openwrt
+        # 首次编译使用 2 线程稳定输出
+        make -j2 || make -j1 V=s
+
+    - name: Upload release
+      uses: softprops/action-gh-release@v2
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: openwrt-x86-64-${{ github.run_number }}
+        files: openwrt/bin/targets/x86/64/*
