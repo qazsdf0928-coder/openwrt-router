@@ -1,4 +1,4 @@
-name: OpenWrt + Mihomo Build
+name: OpenWrt + Mihomo + MosDNS (Stable)
 
 on:
   workflow_dispatch:
@@ -17,7 +17,7 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
 
-    - name: Prepare environment
+    - name: Install deps
       run: |
         sudo apt-get update
         sudo apt-get install -y build-essential clang flex bison gawk \
@@ -34,12 +34,17 @@ jobs:
         ./scripts/feeds update -a
         ./scripts/feeds install -a
 
-    - name: Add Mihomo + OpenClash
+    - name: Add core packages (Mihomo + MosDNS)
       run: |
         cd openwrt/package
 
+        # 代理核心
         git clone https://github.com/vernesong/OpenClash
         git clone https://github.com/MetaCubeX/mihomo
+
+        # DNS核心（补上你缺的）
+        git clone https://github.com/sbwml/luci-app-mosdns
+        git clone https://github.com/sbwml/mosdns
 
     - name: Load config
       run: |
@@ -63,5 +68,5 @@ jobs:
     - name: Upload firmware
       uses: actions/upload-artifact@v4
       with:
-        name: openwrt-mihomo
+        name: openwrt-mihomo-mosdns
         path: openwrt/bin
