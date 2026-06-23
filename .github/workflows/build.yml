@@ -1,7 +1,11 @@
-name: OpenWrt Build (Stage 1)
+name: OpenWrt Build (Stage 2)
 
 on:
   workflow_dispatch:
+
+env:
+  REPO_URL: https://github.com/openwrt/openwrt.git
+  REPO_BRANCH: openwrt-24.10
 
 jobs:
   build:
@@ -14,12 +18,21 @@ jobs:
     - name: Install deps
       run: |
         sudo apt-get update
-        sudo apt-get install -y git build-essential
+        sudo apt-get install -y build-essential clang flex bison gawk \
+        gcc-multilib git libncurses5-dev libssl-dev python3 unzip zlib1g-dev \
+        file wget curl rsync time qemu-utils libelf-dev
 
     - name: Clone OpenWrt
       run: |
-        git clone https://github.com/openwrt/openwrt.git
+        git clone $REPO_URL -b $REPO_BRANCH openwrt
 
-    - name: Done
+    - name: Update feeds
       run: |
-        echo "OpenWrt source cloned OK"
+        cd openwrt
+        ./scripts/feeds update -a
+        ./scripts/feeds install -a
+
+    - name: Prepare config
+      run: |
+        cd openwrt
+        make defconfig
